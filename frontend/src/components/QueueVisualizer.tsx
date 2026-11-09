@@ -261,6 +261,11 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
   const [incomingPulse, setIncomingPulse] = useState<boolean>(false);
   const [outgoingPulse, setOutgoingPulse] = useState<boolean>(false);
 
+  // Tokens de eventos exactos para disparar 1 animación puntual por cada transición real
+  const [arrivalAnimEvent, setArrivalAnimEvent] = useState<{ id: number; label: string } | null>(null);
+  const [assignAnimEvent, setAssignAnimEvent] = useState<{ id: number; label: string } | null>(null);
+  const [dispatchAnimEvent, setDispatchAnimEvent] = useState<{ id: number; label: string } | null>(null);
+
   const nextTicketIdRef = useRef<number>(1);
   const timeToNextArrivalRef = useRef<number>(sampleExponentialSeconds(lambda_rate));
   const simTimeRef = useRef<number>(0);
@@ -310,6 +315,9 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
     setTotalArrived(0);
     setTotalResolved(0);
     setCumulativeWaitSimSec(0);
+    setArrivalAnimEvent(null);
+    setAssignAnimEvent(null);
+    setDispatchAnimEvent(null);
   };
 
   useEffect(() => {
@@ -331,8 +339,15 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
       setServers(updatedServers);
       setTotalArrived(1);
       setHasStarted(true);
+      const evt = { id: Date.now(), label: firstTk.label };
+      setArrivalAnimEvent(evt);
+      setAssignAnimEvent(evt);
       setIncomingPulse(true);
-      setTimeout(() => setIncomingPulse(false), 600);
+      setTimeout(() => {
+        setIncomingPulse(false);
+        setArrivalAnimEvent(null);
+        setAssignAnimEvent(null);
+      }, 700);
     }
     setIsRunning(true);
   };
@@ -351,8 +366,13 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
     }
     const newTk = createTicket(simTimeRef.current);
     setTotalArrived((prev) => prev + 1);
+    const evt = { id: Date.now() + Math.random(), label: newTk.label };
+    setArrivalAnimEvent(evt);
     setIncomingPulse(true);
-    setTimeout(() => setIncomingPulse(false), 600);
+    setTimeout(() => {
+      setIncomingPulse(false);
+      setArrivalAnimEvent((curr) => (curr?.id === evt.id ? null : curr));
+    }, 700);
 
     const currentServers = [...serversRef.current];
     const freeServerIndex = currentServers.findIndex((s) => s.currentTicket === null);
@@ -365,6 +385,10 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
       };
       serversRef.current = currentServers;
       setServers(currentServers);
+      setAssignAnimEvent(evt);
+      setTimeout(() => {
+        setAssignAnimEvent((curr) => (curr?.id === evt.id ? null : curr));
+      }, 700);
     } else {
       const updatedQueue = [...waitingQueueRef.current, newTk];
       waitingQueueRef.current = updatedQueue;
@@ -388,7 +412,11 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
         currentTicket: s.currentTicket ? { ...s.currentTicket } : null,
       }));
       let newlyArrivedCount = 0;
+      let lastArrivedLabel = '';
       let newlyResolvedCount = 0;
+      let lastResolvedLabel = '';
+      let newlyAssignedCount = 0;
+      let lastAssignedLabel = '';
       let addedWaitSec = 0;
       const newLogs: CompletedTicketLog[] = [];
 
@@ -399,13 +427,19 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
           const arrivedTicket = createTicket(nowSim);
           queueCopy.push(arrivedTicket);
           newlyArrivedCount++;
+          lastArrivedLabel = arrivedTicket.label;
         }
         timeToNextArrivalRef.current += sampleExponentialSeconds(lambda_rate);
       }
 
       if (newlyArrivedCount > 0) {
+        const arrEvt = { id: Date.now() + Math.random(), label: lastArrivedLabel };
+        setArrivalAnimEvent(arrEvt);
         setIncomingPulse(true);
-        setTimeout(() => setIncomingPulse(false), 450);
+        setTimeout(() => {
+          setIncomingPulse(false);
+          setArrivalAnimEvent((curr) => (curr?.id === arrEvt.id ? null : curr));
+        }, 700);
       }
 
       // 2. Progreso en las computadoras de los técnicos
@@ -430,6 +464,7 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
             });
 
             srv.justFinishedTicketLabel = finished.label;
+            lastResolvedLabel = finished.label;
             srv.currentTicket = null;
             srv.ticketsResolved += 1;
             newlyResolvedCount += 1;
@@ -437,9 +472,15 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
         }
       }
 
+      // Disparar el sobre de salida ÚNICAMENTE cuando un técnico termina de resolver un ticket
       if (newlyResolvedCount > 0) {
+        const outEvt = { id: Date.now() + Math.random(), label: lastResolvedLabel };
+        setDispatchAnimEvent(outEvt);
         setOutgoingPulse(true);
-        setTimeout(() => setOutgoingPulse(false), 550);
+        setTimeout(() => {
+          setOutgoingPulse(false);
+          setDispatchAnimEvent((curr) => (curr?.id === outEvt.id ? null : curr));
+        }, 700);
       }
 
       // 3. Asignación de la bandeja de entrada (FIFO) a un técnico libre
@@ -450,7 +491,17 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
           const waited = Math.max(0, nowSim - nextInLine.createdAtSimSec);
           addedWaitSec += waited;
           serversCopy[i].currentTicket = nextInLine;
+          newlyAssignedCount += 1;
+          lastAssignedLabel = nextInLine.label;
         }
+      }
+
+      if (newlyAssignedCount > 0) {
+        const asgEvt = { id: Date.now() + Math.random(), label: lastAssignedLabel };
+        setAssignAnimEvent(asgEvt);
+        setTimeout(() => {
+          setAssignAnimEvent((curr) => (curr?.id === asgEvt.id ? null : curr));
+        }, 700);
       }
 
       waitingQueueRef.current = queueCopy;
@@ -668,19 +719,27 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
             </div>
           </div>
 
-          {/* CANAL ANIMADO 1: Correos viajando hacia la Bandeja */}
+          {/* CANAL ANIMADO 1: Correos viajando hacia la Bandeja SOLO cuando llega un correo */}
           <div className="lg:col-span-1 flex flex-col items-center justify-center py-2">
-            <div className="w-full h-10 relative flex items-center justify-center overflow-hidden">
-              <div className="w-full border-t-2 border-dashed border-sky-500/40" />
-              {(isRunning || incomingPulse) && (
-                <div className="absolute left-0 flex items-center justify-center animate-mail-in">
-                  <div className="p-1.5 rounded-lg bg-sky-500 text-slate-950 shadow-md shadow-sky-500/40">
-                    <Mail className="w-4 h-4" />
+            <div className="w-full h-12 relative flex items-center justify-center overflow-hidden">
+              <div className="w-full border-t-2 border-dashed border-sky-500/35" />
+              {arrivalAnimEvent && (
+                <div
+                  key={arrivalAnimEvent.id}
+                  className="absolute top-1/2 flex flex-col items-center animate-mail-hop-once"
+                >
+                  <div className="p-1.5 rounded-lg bg-sky-400 text-slate-950 shadow-lg shadow-sky-400/50">
+                    <Mail className="w-3.5 h-3.5" />
                   </div>
+                  <span className="text-[9px] font-mono font-bold text-sky-300 mt-0.5">
+                    {arrivalAnimEvent.label}
+                  </span>
                 </div>
               )}
             </div>
-            <span className="text-[10px] text-sky-400 font-mono">Entrando</span>
+            <span className="text-[10px] text-sky-400/80 font-mono">
+              {arrivalAnimEvent ? `Entró ${arrivalAnimEvent.label}` : 'Canal Entrada'}
+            </span>
           </div>
 
           {/* NODO 2: Bandeja de Entrada / Cola FIFO */}
@@ -710,19 +769,27 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
             </div>
           </div>
 
-          {/* CANAL ANIMADO 2: Asignación a Técnicos */}
+          {/* CANAL ANIMADO 2: Asignación a Técnicos SOLO cuando un ticket pasa de la cola a un PC */}
           <div className="lg:col-span-1 flex flex-col items-center justify-center py-2">
-            <div className="w-full h-10 relative flex items-center justify-center overflow-hidden">
-              <div className="w-full border-t-2 border-dashed border-indigo-500/40" />
-              {isRunning && busyServersCount > 0 && (
-                <div className="absolute left-0 flex items-center justify-center animate-mail-in">
-                  <div className="p-1.5 rounded-lg bg-indigo-500 text-white shadow-md shadow-indigo-500/40">
-                    <Mail className="w-4 h-4" />
+            <div className="w-full h-12 relative flex items-center justify-center overflow-hidden">
+              <div className="w-full border-t-2 border-dashed border-indigo-500/35" />
+              {assignAnimEvent && (
+                <div
+                  key={assignAnimEvent.id}
+                  className="absolute top-1/2 flex flex-col items-center animate-mail-hop-once"
+                >
+                  <div className="p-1.5 rounded-lg bg-indigo-500 text-white shadow-lg shadow-indigo-500/50">
+                    <Mail className="w-3.5 h-3.5" />
                   </div>
+                  <span className="text-[9px] font-mono font-bold text-indigo-300 mt-0.5">
+                    {assignAnimEvent.label}
+                  </span>
                 </div>
               )}
             </div>
-            <span className="text-[10px] text-indigo-400 font-mono">Asignando</span>
+            <span className="text-[10px] text-indigo-400/80 font-mono">
+              {assignAnimEvent ? `Tomó ${assignAnimEvent.label}` : 'Asignación PC'}
+            </span>
           </div>
 
           {/* NODO 3: Estaciones de Computadoras (s Técnicos) */}
@@ -741,19 +808,27 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
             </div>
           </div>
 
-          {/* CANAL ANIMADO 3: Correos Despachados / Resueltos Saliendo */}
+          {/* CANAL ANIMADO 3: Correos Despachados Saliendo ÚNICAMENTE cuando un técnico termina al 100% */}
           <div className="lg:col-span-1 flex flex-col items-center justify-center py-2">
-            <div className="w-full h-10 relative flex items-center justify-center overflow-hidden">
-              <div className="w-full border-t-2 border-dashed border-emerald-500/40" />
-              {(isRunning && totalResolved > 0) || outgoingPulse ? (
-                <div className="absolute left-0 flex items-center justify-center animate-mail-out">
-                  <div className="p-1.5 rounded-lg bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/40">
-                    <Send className="w-4 h-4" />
+            <div className="w-full h-12 relative flex items-center justify-center overflow-hidden">
+              <div className="w-full border-t-2 border-dashed border-emerald-500/35" />
+              {dispatchAnimEvent && (
+                <div
+                  key={dispatchAnimEvent.id}
+                  className="absolute top-1/2 flex flex-col items-center animate-mail-hop-once"
+                >
+                  <div className="p-1.5 rounded-lg bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-400/50">
+                    <Send className="w-3.5 h-3.5" />
                   </div>
+                  <span className="text-[9px] font-mono font-bold text-emerald-300 mt-0.5">
+                    {dispatchAnimEvent.label}
+                  </span>
                 </div>
-              ) : null}
+              )}
             </div>
-            <span className="text-[10px] text-emerald-400 font-mono">Despachando</span>
+            <span className="text-[10px] text-emerald-400/80 font-mono">
+              {dispatchAnimEvent ? `Salió ${dispatchAnimEvent.label}` : 'Canal Salida'}
+            </span>
           </div>
 
           {/* NODO 4: Tickets Despachados */}

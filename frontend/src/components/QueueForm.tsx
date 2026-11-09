@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play, RotateCcw, Users, Zap, Activity, Sparkles } from 'lucide-react';
 import { QueueRequest } from '../types/queue';
 
@@ -8,25 +8,51 @@ interface QueueFormProps {
   isLoading: boolean;
 }
 
-const PRESETS: { name: string; badge: string; values: QueueRequest }[] = [
+interface PresetCase {
+  id: string;
+  name: string;
+  subtitle: string;
+  badge: string;
+  badgeStyle: string;
+  activeBorder: string;
+  values: QueueRequest;
+}
+
+const PRESETS: PresetCase[] = [
   {
-    name: 'Soporte Nivel 1 (M/M/1 Estable)',
-    badge: 'M/M/1',
-    values: { lambda_rate: 8, mu_rate: 10, num_servers: 1 },
+    id: 'optimo',
+    name: '1. Escenario Óptimo (M/M/3)',
+    subtitle: 'Atención casi inmediata · ρ = 50%',
+    badge: 'Óptimo',
+    badgeStyle: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30',
+    activeBorder: 'border-emerald-500/60 bg-emerald-950/20',
+    values: { lambda_rate: 15, mu_rate: 10, num_servers: 3 },
   },
   {
-    name: 'Mesa IT Hora Pico (M/M/2 Crítico)',
-    badge: 'M/M/2',
+    id: 'estable',
+    name: '2. Escenario Estable (M/M/2)',
+    subtitle: 'Operación normal equilibrada · ρ = 70%',
+    badge: 'Estable',
+    badgeStyle: 'bg-sky-500/15 text-sky-300 border border-sky-500/30',
+    activeBorder: 'border-sky-500/60 bg-sky-950/20',
+    values: { lambda_rate: 14, mu_rate: 10, num_servers: 2 },
+  },
+  {
+    id: 'critico',
+    name: '3. Escenario Crítico (M/M/2)',
+    subtitle: 'Hora pico con alta congestión · ρ = 90%',
+    badge: 'Crítico',
+    badgeStyle: 'bg-amber-500/15 text-amber-300 border border-amber-500/30',
+    activeBorder: 'border-amber-500/60 bg-amber-950/20',
     values: { lambda_rate: 18, mu_rate: 10, num_servers: 2 },
   },
   {
-    name: 'Centro de Servicio (M/M/3 Óptimo)',
-    badge: 'M/M/3',
-    values: { lambda_rate: 22, mu_rate: 10, num_servers: 3 },
-  },
-  {
-    name: 'Colapso Operativo (ρ ≥ 1)',
-    badge: 'Saturado',
+    id: 'colapsado',
+    name: '4. Escenario Colapsado (ρ ≥ 1)',
+    subtitle: 'Demanda supera capacidad · ρ = 125%',
+    badge: 'Colapsado',
+    badgeStyle: 'bg-rose-500/15 text-rose-300 border border-rose-500/30',
+    activeBorder: 'border-rose-500/60 bg-rose-950/20',
     values: { lambda_rate: 25, mu_rate: 10, num_servers: 2 },
   },
 ];
@@ -41,6 +67,13 @@ export const QueueForm: React.FC<QueueFormProps> = ({
   const [numServers, setNumServers] = useState<string>(String(initialValues.num_servers));
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Sincronizar los inputs con los valores activos del padre
+  useEffect(() => {
+    setLambdaRate(String(initialValues.lambda_rate));
+    setMuRate(String(initialValues.mu_rate));
+    setNumServers(String(initialValues.num_servers));
+  }, [initialValues.lambda_rate, initialValues.mu_rate, initialValues.num_servers]);
+
   const parsedLambda = parseFloat(lambdaRate);
   const parsedMu = parseFloat(muRate);
   const parsedServers = parseInt(numServers, 10);
@@ -54,6 +87,17 @@ export const QueueForm: React.FC<QueueFormProps> = ({
     parsedServers >= 1
       ? parsedLambda / (parsedServers * parsedMu)
       : null;
+
+  const previewStateLabel =
+    previewRho === null
+      ? ''
+      : previewRho <= 0.6
+      ? 'Óptimo'
+      : previewRho < 0.85
+      ? 'Estable'
+      : previewRho < 1.0
+      ? 'Crítico'
+      : 'Colapsado';
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,33 +126,83 @@ export const QueueForm: React.FC<QueueFormProps> = ({
     setMuRate(String(preset.mu_rate));
     setNumServers(String(preset.num_servers));
     setValidationError(null);
-    onSubmit(preset);
+    onSubmit({ ...preset });
   };
 
   const handleReset = () => {
-    const def = { lambda_rate: 18, mu_rate: 10, num_servers: 2 };
+    // Restaurar al primer caso (Óptimo)
+    const def = PRESETS[0].values;
     setLambdaRate(String(def.lambda_rate));
     setMuRate(String(def.mu_rate));
     setNumServers(String(def.num_servers));
     setValidationError(null);
-    onSubmit(def);
+    onSubmit({ ...def });
   };
 
   return (
-    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
-      <div className="flex items-center justify-between mb-5">
+    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h2 className="text-base font-bold text-white flex items-center gap-2">
             <Activity className="w-5 h-5 text-indigo-400" />
             Parámetros del Sistema
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Configura las tasas por hora para evaluar el modelo estocástico
+            Configura las tasas por hora o elige un caso de estudio
           </p>
         </div>
         <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
           {parsedServers === 1 ? 'Modelo M/M/1' : `Modelo M/M/${isNaN(parsedServers) ? 's' : parsedServers}`}
         </span>
+      </div>
+
+      {/* Casos de Estudio Preconfigurados en Orden: Óptimo -> Estable -> Crítico -> Colapsado */}
+      <div className="mb-5 pb-5 border-b border-slate-800/80">
+        <div className="flex items-center justify-between text-xs font-semibold text-slate-300 mb-2.5">
+          <span className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            Casos de Estudio Preconfigurados
+          </span>
+          <span className="text-[10px] text-slate-500 font-normal">Clic para cargar</span>
+        </div>
+        <div className="grid grid-cols-1 gap-2">
+          {PRESETS.map((preset) => {
+            const isSelected =
+              parsedLambda === preset.values.lambda_rate &&
+              parsedMu === preset.values.mu_rate &&
+              parsedServers === preset.values.num_servers;
+
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => applyPreset(preset.values)}
+                className={`w-full text-left px-3.5 py-2.5 rounded-xl border transition-all flex items-center justify-between group cursor-pointer ${
+                  isSelected
+                    ? `${preset.activeBorder} shadow-md`
+                    : 'bg-slate-950/70 hover:bg-slate-800/70 border-slate-800/80'
+                }`}
+              >
+                <div className="min-w-0 pr-2">
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>{preset.name}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {preset.subtitle}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                    λ={preset.values.lambda_rate}/h · μ={preset.values.mu_rate}/h · s={preset.values.num_servers} técnicos
+                  </div>
+                </div>
+                <span
+                  className={`shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-lg ${preset.badgeStyle}`}
+                >
+                  {preset.badge}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <form onSubmit={handleFormSubmit} className="space-y-4">
@@ -124,7 +218,7 @@ export const QueueForm: React.FC<QueueFormProps> = ({
               min="0.1"
               value={lambdaRate}
               onChange={(e) => setLambdaRate(e.target.value)}
-              placeholder="Ej: 18"
+              placeholder="Ej: 15"
               className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
               required
             />
@@ -169,7 +263,7 @@ export const QueueForm: React.FC<QueueFormProps> = ({
               max="50"
               value={numServers}
               onChange={(e) => setNumServers(e.target.value)}
-              placeholder="Ej: 2"
+              placeholder="Ej: 3"
               className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
               required
             />
@@ -187,15 +281,19 @@ export const QueueForm: React.FC<QueueFormProps> = ({
         {previewRho !== null && (
           <div
             className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
-              previewRho < 0.75
+              previewRho <= 0.6
                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : previewRho < 0.85
+                ? 'bg-sky-500/10 border-sky-500/30 text-sky-300'
                 : previewRho < 1.0
                 ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
                 : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
             }`}
           >
-            <span>Factor de carga precalculado (ρ = λ / s·μ):</span>
-            <span className="font-bold text-sm">{(previewRho * 100).toFixed(1)}%</span>
+            <span>
+              Carga (ρ): <strong>{previewStateLabel}</strong>
+            </span>
+            <span className="font-bold text-sm font-mono">{(previewRho * 100).toFixed(1)}%</span>
           </div>
         )}
 
@@ -205,7 +303,7 @@ export const QueueForm: React.FC<QueueFormProps> = ({
           </div>
         )}
 
-        <div className="flex gap-2 pt-2">
+        <div className="flex gap-2 pt-1">
           <button
             type="submit"
             disabled={isLoading}
@@ -217,49 +315,13 @@ export const QueueForm: React.FC<QueueFormProps> = ({
           <button
             type="button"
             onClick={handleReset}
-            title="Restaurar valores por defecto"
+            title="Restaurar a Escenario Óptimo"
             className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
         </div>
       </form>
-
-      <div className="mt-6 pt-5 border-t border-slate-800/80">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mb-3">
-          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-          Casos de Estudio Preconfigurados
-        </div>
-        <div className="grid grid-cols-1 gap-2">
-          {PRESETS.map((preset) => (
-            <button
-              key={preset.name}
-              type="button"
-              onClick={() => applyPreset(preset.values)}
-              className="w-full text-left px-3 py-2 rounded-xl bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800/80 transition flex items-center justify-between group cursor-pointer"
-            >
-              <div>
-                <div className="text-xs font-medium text-slate-200 group-hover:text-white">
-                  {preset.name}
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  λ={preset.values.lambda_rate}/h · μ={preset.values.mu_rate}/h · s={preset.values.num_servers}
-                </div>
-              </div>
-              <span
-                className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-                  preset.badge === 'Saturado'
-                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
-                    : 'bg-slate-800 text-slate-300'
-                }`}
-              >
-                {preset.badge}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };
-

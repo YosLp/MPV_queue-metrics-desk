@@ -43,10 +43,10 @@ export const MetricsCards: React.FC<MetricsCardsProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold text-rose-200">
-                    Sistema Saturado — Condición de Inestabilidad (ρ ≥ 1)
+                    4. Sistema Colapsado — Condición de Inestabilidad (ρ ≥ 1)
                   </h3>
                   <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                    {saturatedError.model_type} Inestable
+                    {saturatedError.model_type} Colapsado
                   </span>
                 </div>
                 <p className="text-sm text-rose-200/90 mt-1 leading-relaxed">
@@ -85,18 +85,18 @@ export const MetricsCards: React.FC<MetricsCardsProps> = ({
 
   const rhoPercent = metrics.rho * 100;
   const utilizationColor =
-    metrics.rho < 0.7
+    metrics.rho <= 0.6
       ? 'bg-emerald-500'
       : metrics.rho < 0.85
-      ? 'bg-amber-500'
-      : 'bg-rose-500';
+      ? 'bg-sky-500'
+      : 'bg-amber-500';
 
   const utilizationBadge =
-    metrics.rho < 0.7
-      ? { text: 'Holgado / Estable', classes: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' }
+    metrics.rho <= 0.6
+      ? { text: '1. Óptimo (Holgado)', classes: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' }
       : metrics.rho < 0.85
-      ? { text: 'Carga Moderada-Alta', classes: 'bg-amber-500/15 text-amber-300 border-amber-500/30' }
-      : { text: 'Congestión Crítica', classes: 'bg-rose-500/15 text-rose-300 border-rose-500/30' };
+      ? { text: '2. Estable (Operación Normal)', classes: 'bg-sky-500/15 text-sky-300 border-sky-500/30' }
+      : { text: '3. Crítico (Alta Congestión)', classes: 'bg-amber-500/15 text-amber-300 border-amber-500/30' };
 
   return (
     <div className="space-y-4">

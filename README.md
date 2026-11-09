@@ -62,6 +62,7 @@ $$\rho = \frac{\lambda}{s \cdot \mu} < 1$$
 │   │   ├── components/
 │   │   │   ├── QueueForm.tsx         # Formulario interactivo y casos preconfigurados
 │   │   │   ├── MetricsCards.tsx      # Indicadores KPI y alertas de saturación
+│   │   │   ├── QueueVisualizer.tsx   # Simulación gráfica animada en vivo del flujo de tickets
 │   │   │   ├── ScenarioTable.tsx     # Tabla comparativa para s, s+1 y s+2 técnicos
 │   │   │   └── QueueChart.tsx        # Gráfico Recharts de Wq, W y utilización ρ
 │   │   ├── types/

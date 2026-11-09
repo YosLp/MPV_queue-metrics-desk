@@ -10,6 +10,7 @@ import { QueueForm } from './components/QueueForm';
 import { MetricsCards } from './components/MetricsCards';
 import { ScenarioTable } from './components/ScenarioTable';
 import { QueueChart } from './components/QueueChart';
+import { QueueVisualizer } from './components/QueueVisualizer';
 import {
   QueueMetricsResponse,
   QueueRequest,
@@ -283,9 +284,10 @@ export const App: React.FC = () => {
             />
           </div>
 
-          {/* Columna Derecha: Métricas, Gráfico y Tabla de Escenarios */}
+          {/* Columna Derecha: Métricas, Simulación Animada en Vivo, Gráfico y Tabla de Escenarios */}
           <div className="lg:col-span-8 space-y-6">
             <MetricsCards metrics={metrics} saturatedError={saturatedError} />
+            <QueueVisualizer params={requestParams} />
             <QueueChart scenarios={scenarios} />
             <ScenarioTable scenarios={scenarios} />
           </div>

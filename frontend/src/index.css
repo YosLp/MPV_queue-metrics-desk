@@ -8,3 +8,22 @@ body {
   color: #f8fafc;
 }
 
+/* Scrollbar oscuro y elegante para evitar barras blancas de Windows */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090d16;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}

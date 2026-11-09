@@ -8,7 +8,7 @@ body {
   color: #f8fafc;
 }
 
-/* Scrollbar oscuro y elegante para evitar barras blancas de Windows */
+/* Scrollbar oscuro y elegante */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -26,4 +26,66 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
+}
+
+/* Animación de sobres de correo viajando de izquierda a derecha */
+@keyframes mailFlowRight {
+  0% {
+    transform: translateX(-10px) scale(0.85);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+    transform: translateX(15px) scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: translateX(75px) scale(1);
+  }
+  100% {
+    transform: translateX(100px) scale(0.85);
+    opacity: 0;
+  }
+}
+
+/* Animación de paquetes resueltos saliendo hacia la bandeja de completados */
+@keyframes mailDispatchOut {
+  0% {
+    transform: translateX(-8px) translateY(0px) scale(0.8);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+    transform: translateX(20px) translateY(-3px) scale(1.05);
+  }
+  80% {
+    opacity: 1;
+    transform: translateX(70px) translateY(0px) scale(1);
+  }
+  100% {
+    transform: translateX(95px) translateY(2px) scale(0.85);
+    opacity: 0;
+  }
+}
+
+/* Animación sutil del técnico tecleando en el computador */
+@keyframes techTyping {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+.animate-mail-in {
+  animation: mailFlowRight 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-mail-out {
+  animation: mailDispatchOut 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-tech-typing {
+  animation: techTyping 0.45s ease-in-out infinite;
 }

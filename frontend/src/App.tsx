@@ -111,9 +111,9 @@ function computeLocalMetrics(req: QueueRequest): QueueMetricsResponse {
 
 export const App: React.FC = () => {
   const [requestParams, setRequestParams] = useState<QueueRequest>({
-    lambda_rate: 18,
+    lambda_rate: 15,
     mu_rate: 10,
-    num_servers: 2,
+    num_servers: 3,
   });
   const [metrics, setMetrics] = useState<QueueMetricsResponse | null>(null);
   const [saturatedError, setSaturatedError] =

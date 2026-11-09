@@ -21,10 +21,6 @@ import {
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1/queue';
 
-/**
- * Motor matemático determinista de respaldo en cliente en caso de que el servidor backend
- * no esté disponible localmente, garantizando las mismas fórmulas exactas M/M/1 y M/M/s.
- */
 function factorial(n: number): number {
   let res = 1;
   for (let i = 2; i <= n; i++) res *= i;
@@ -161,7 +157,6 @@ export const App: React.FC = () => {
         setScenarios(compData.scenarios);
       }
     } catch {
-      // Respaldo determinista local si el backend FastAPI aún no ha sido iniciado
       setUsingOfflineEngine(true);
       const localResult = computeLocalMetrics(params);
       if (!localResult.is_stable) {
@@ -227,11 +222,11 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Barra de Navegación Superior */}
-      <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
+      {/* Barra de Navegación Superior Full-Width */}
+      <header className="border-b border-slate-800/80 bg-slate-900/75 backdrop-blur sticky top-0 z-30">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
+            <div className="p-2.5 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 shadow-inner">
               <Headset className="w-6 h-6" />
             </div>
             <div>
@@ -239,7 +234,7 @@ export const App: React.FC = () => {
                 Support Desk Queueing Analyzer
               </h1>
               <p className="text-xs text-slate-400">
-                Simulador Analítico de Teoría de Colas (Modelos Estocásticos M/M/1 y M/M/s Erlang-C)
+                Simulador Analítico y Estocástico de Teoría de Colas (Modelos M/M/1 y M/M/s Erlang-C)
               </p>
             </div>
           </div>
@@ -272,31 +267,37 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Contenido Principal */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Columna Izquierda: Formulario y Presets */}
-          <div className="lg:col-span-4">
+      {/* Layout Principal Tipo Dashboard con Sidebar Izquierdo Fijo y Área Central Expandida */}
+      <div className="flex-1 flex flex-col lg:flex-row w-full">
+        {/* Sidebar Lateral Izquierdo (Parámetros del Sistema) */}
+        <aside className="w-full lg:w-[340px] xl:w-[370px] shrink-0 border-b lg:border-b-0 lg:border-r border-slate-800/80 bg-slate-900/35 p-4 sm:p-5">
+          <div className="lg:sticky lg:top-20">
             <QueueForm
               initialValues={requestParams}
               onSubmit={runAnalysis}
               isLoading={isLoading}
             />
           </div>
+        </aside>
 
-          {/* Columna Derecha: Métricas, Simulación Animada en Vivo, Gráfico y Tabla de Escenarios */}
-          <div className="lg:col-span-8 space-y-6">
-            <MetricsCards metrics={metrics} saturatedError={saturatedError} />
-            <QueueVisualizer params={requestParams} />
-            <QueueChart scenarios={scenarios} />
-            <ScenarioTable scenarios={scenarios} />
+        {/* Área Principal de Visualización (Ocupa todo el ancho restante) */}
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-7 space-y-6">
+          <MetricsCards metrics={metrics} saturatedError={saturatedError} />
+          <QueueVisualizer params={requestParams} />
+          <div className="grid grid-cols-1 2xl:grid-cols-12 gap-6 items-start">
+            <div className="2xl:col-span-6">
+              <QueueChart scenarios={scenarios} />
+            </div>
+            <div className="2xl:col-span-6">
+              <ScenarioTable scenarios={scenarios} />
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
 
-      {/* Pie de página con resumen de fórmulas */}
-      <footer className="border-t border-slate-900 bg-slate-950/90 mt-12 py-5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+      {/* Pie de página */}
+      <footer className="border-t border-slate-900 bg-slate-950 py-4 px-4 sm:px-6 lg:px-8">
+        <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
           <div className="flex items-center gap-2">
             <Server className="w-4 h-4 text-indigo-400" />
             <span>
@@ -311,4 +312,3 @@ export const App: React.FC = () => {
 };
 
 export default App;
-

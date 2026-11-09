@@ -11,6 +11,9 @@ import {
   ArrowRight,
   AlertOctagon,
   Gauge,
+  Radio,
+  Ticket,
+  Cpu,
 } from 'lucide-react';
 import { QueueRequest } from '../types/queue';
 
@@ -43,38 +46,31 @@ interface CompletedTicketLog {
 }
 
 const TICKET_COLORS = [
-  'bg-sky-500 border-sky-300 text-white',
-  'bg-indigo-500 border-indigo-300 text-white',
-  'bg-emerald-500 border-emerald-300 text-white',
-  'bg-amber-500 border-amber-300 text-slate-950',
-  'bg-purple-500 border-purple-300 text-white',
-  'bg-pink-500 border-pink-300 text-white',
-  'bg-cyan-500 border-cyan-300 text-slate-950',
+  'bg-sky-500/20 border-sky-400/50 text-sky-200',
+  'bg-indigo-500/20 border-indigo-400/50 text-indigo-200',
+  'bg-emerald-500/20 border-emerald-400/50 text-emerald-200',
+  'bg-amber-500/20 border-amber-400/50 text-amber-200',
+  'bg-purple-500/20 border-purple-400/50 text-purple-200',
+  'bg-pink-500/20 border-pink-400/50 text-pink-200',
+  'bg-cyan-500/20 border-cyan-400/50 text-cyan-200',
 ];
 
-/**
- * Genera una variable aleatoria con distribución exponencial Exp(rate)
- * donde rate está expresada en eventos por segundo simulado.
- */
 function sampleExponentialSeconds(ratePerHour: number): number {
   const ratePerSec = ratePerHour / 3600;
   if (ratePerSec <= 0) return 60;
   const u = Math.max(Math.random(), 1e-6);
   const rawSec = -Math.log(u) / ratePerSec;
-  // Acotar entre 15 segundos y 4 veces la media para una visualización fluida
   const meanSec = 3600 / ratePerHour;
-  return Math.min(Math.max(rawSec, 10), meanSec * 3.5);
+  return Math.min(Math.max(rawSec, 12), meanSec * 3.2);
 }
 
 export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
   const { lambda_rate, mu_rate, num_servers } = params;
-  // Limitamos visualmente hasta 12 estaciones para mantener un layout limpio;
-  // si hay más, se indica en pantalla.
-  const visibleServersCount = Math.min(Math.max(num_servers, 1), 12);
+  const visibleServersCount = Math.min(Math.max(num_servers, 1), 16);
 
-  const [isRunning, setIsRunning] = useState<boolean>(true);
-  // Factor de escala: cuántos minutos de la vida real transcurren por cada segundo de animación
-  // Ej: speed = 60 significa 1 min simulado por segundo real (60x)
+  // La simulación NO empieza sola: espera a que el usuario presione "Iniciar Simulación"
+  const [hasStarted, setHasStarted] = useState<boolean>(false);
+  const [isRunning, setIsRunning] = useState<boolean>(false);
   const [simSpeed, setSimSpeed] = useState<number>(60);
   const [simElapsedSec, setSimElapsedSec] = useState<number>(0);
 
@@ -106,13 +102,12 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
     };
   };
 
-  // Reiniciar o adaptar la simulación cuando cambian λ, μ o s
-  const resetSimulation = () => {
+  // Inicializa en estado limpio (en pausa, listo para arrancar cuando el usuario lo indique)
+  const initializeCleanState = () => {
     nextTicketIdRef.current = 1;
     simTimeRef.current = 0;
 
-    // Pre-poblar con un par de tickets iniciales para que la animación sea inmediata
-    const initialServers: ServerSlot[] = Array.from(
+    const cleanServers: ServerSlot[] = Array.from(
       { length: visibleServersCount },
       (_, idx) => ({
         serverId: idx + 1,
@@ -121,35 +116,63 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
       })
     );
 
-    const firstTicket = createTicket(0);
-    firstTicket.startedServiceAtSimSec = 0;
-    initialServers[0].currentTicket = firstTicket;
-
-    serversRef.current = initialServers;
+    serversRef.current = cleanServers;
     waitingQueueRef.current = [];
-    timeToNextArrivalRef.current = sampleExponentialSeconds(lambda_rate) * 0.4;
+    timeToNextArrivalRef.current = sampleExponentialSeconds(lambda_rate) * 0.25;
 
-    setServers(initialServers);
+    setIsRunning(false);
+    setHasStarted(false);
+    setServers(cleanServers);
     setWaitingQueue([]);
     setCompletedLogs([]);
     setSimElapsedSec(0);
-    setTotalArrived(1);
+    setTotalArrived(0);
     setTotalResolved(0);
     setCumulativeWaitSimSec(0);
   };
 
   useEffect(() => {
-    resetSimulation();
+    initializeCleanState();
   }, [lambda_rate, mu_rate, num_servers]);
 
-  // Inyección manual de un ticket por parte del usuario
+  const handleStartSimulation = () => {
+    if (!hasStarted) {
+      // Al darle a "Iniciar Simulación" por primera vez, inyectamos el primer ticket inmediato
+      // para que el usuario vea acción al instante
+      const firstTk = createTicket(0);
+      firstTk.startedServiceAtSimSec = 0;
+      const updatedServers = [...serversRef.current];
+      if (updatedServers.length > 0) {
+        updatedServers[0] = {
+          ...updatedServers[0],
+          currentTicket: firstTk,
+        };
+      }
+      serversRef.current = updatedServers;
+      setServers(updatedServers);
+      setTotalArrived(1);
+      setHasStarted(true);
+    }
+    setIsRunning(true);
+  };
+
+  const handleTogglePlayPause = () => {
+    if (!hasStarted) {
+      handleStartSimulation();
+    } else {
+      setIsRunning((prev) => !prev);
+    }
+  };
+
   const handleInjectTicket = () => {
+    if (!hasStarted) {
+      setHasStarted(true);
+    }
     const newTk = createTicket(simTimeRef.current);
     setTotalArrived((prev) => prev + 1);
     setRecentArrivalFlash(true);
     setTimeout(() => setRecentArrivalFlash(false), 350);
 
-    // Verificar si algún servidor está libre inmediatamente
     const currentServers = [...serversRef.current];
     const freeServerIndex = currentServers.findIndex((s) => s.currentTicket === null);
 
@@ -168,7 +191,7 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
     }
   };
 
-  // Bucle principal de simulación (Tick cada 100ms = 0.1s reales)
+  // Bucle de simulación (solo corre cuando isRunning === true)
   useEffect(() => {
     if (!isRunning) return;
 
@@ -179,8 +202,8 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
       simTimeRef.current += dtSimSec;
       const nowSim = simTimeRef.current;
 
-      let queueCopy = [...waitingQueueRef.current];
-      let serversCopy = serversRef.current.map((s) => ({
+      const queueCopy = [...waitingQueueRef.current];
+      const serversCopy = serversRef.current.map((s) => ({
         ...s,
         currentTicket: s.currentTicket ? { ...s.currentTicket } : null,
       }));
@@ -189,11 +212,10 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
       let addedWaitSec = 0;
       const newLogs: CompletedTicketLog[] = [];
 
-      // 1. Procesar llegadas de nuevos tickets (Proceso de Poisson)
+      // 1. Llegadas según proceso de Poisson
       timeToNextArrivalRef.current -= dtSimSec;
       while (timeToNextArrivalRef.current <= 0) {
-        // Límite de seguridad visual para colas saturadas (máx 40 en pantalla)
-        if (queueCopy.length < 40) {
+        if (queueCopy.length < 45) {
           const arrivedTicket = createTicket(nowSim);
           queueCopy.push(arrivedTicket);
           newlyArrivedCount++;
@@ -206,14 +228,13 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
         setTimeout(() => setRecentArrivalFlash(false), 250);
       }
 
-      // 2. Actualizar progreso de atención en cada técnico (s servidores en paralelo)
+      // 2. Servicio en estaciones paralelas
       for (let i = 0; i < serversCopy.length; i++) {
         const srv = serversCopy[i];
         if (srv.currentTicket) {
           srv.currentTicket.remainingServiceSimSec -= dtSimSec;
 
           if (srv.currentTicket.remainingServiceSimSec <= 0) {
-            // Ticket completado
             const finished = srv.currentTicket;
             const waitSec =
               (finished.startedServiceAtSimSec ?? finished.createdAtSimSec) -
@@ -234,7 +255,7 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
         }
       }
 
-      // 3. Asignación FIFO: Pasar tickets de la cola a técnicos libres
+      // 3. Pasar de la cola FIFO a servidores disponibles
       for (let i = 0; i < serversCopy.length; i++) {
         if (serversCopy[i].currentTicket === null && queueCopy.length > 0) {
           const nextInLine = queueCopy.shift()!;
@@ -245,7 +266,6 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
         }
       }
 
-      // Guardar referencias y actualizar estado React
       waitingQueueRef.current = queueCopy;
       serversRef.current = serversCopy;
 
@@ -288,53 +308,68 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
   };
 
   return (
-    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
-      {/* Cabecera y Controles Interactivos */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-slate-800">
+    <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/90 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+      {/* Encabezado Principal y Barra de Controles */}
+      <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <span className="relative flex h-3 w-3">
               {isRunning && (
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               )}
               <span
                 className={`relative inline-flex rounded-full h-3 w-3 ${
-                  isRunning ? 'bg-emerald-500' : 'bg-amber-500'
+                  isRunning
+                    ? 'bg-emerald-500'
+                    : hasStarted
+                    ? 'bg-amber-500'
+                    : 'bg-slate-600'
                 }`}
               />
             </span>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              Simulación Interactiva en Vivo — Flujo Real de Tickets (FIFO)
+            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+              Simulador Visual de Flujo de Tickets en Tiempo Real
             </h3>
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-              {num_servers === 1 ? 'M/M/1' : `M/M/${num_servers}`}
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+              {num_servers === 1 ? 'Modelo M/M/1' : `Modelo M/M/${num_servers}`}
+            </span>
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${
+                isRunning
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : hasStarted
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                  : 'bg-slate-800 border-slate-700 text-slate-400'
+              }`}
+            >
+              {isRunning ? 'En ejecución' : hasStarted ? 'En pausa' : 'Listo para iniciar'}
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Observa cómo llegan los tickets aleatoriamente (λ = {lambda_rate}/h), hacen fila cuando los técnicos están ocupados y se resuelven a tasa μ = {mu_rate}/h.
+          <p className="text-xs text-slate-400 mt-1.5">
+            Visualización estocástica paso a paso: Llegadas de Poisson (λ = {lambda_rate} tickets/h) → Fila FIFO → Atención Exponencial (μ = {mu_rate} tickets/h por técnico).
           </p>
         </div>
 
-        {/* Botonera de control de simulación */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Controles de Acción */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
-            onClick={() => setIsRunning((prev) => !prev)}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+            onClick={handleTogglePlayPause}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition shadow-lg cursor-pointer ${
               isRunning
-                ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20'
+                ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25'
             }`}
           >
             {isRunning ? (
               <>
-                <Pause className="w-3.5 h-3.5" />
-                Pausar
+                <Pause className="w-4 h-4" />
+                Pausar Simulación
               </>
             ) : (
               <>
-                <Play className="w-3.5 h-3.5 fill-current" />
-                Reanudar
+                <Play className="w-4 h-4 fill-current" />
+                {hasStarted ? 'Reanudar Simulación' : 'Iniciar Simulación'}
               </>
             )}
           </button>
@@ -342,18 +377,18 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
           <button
             type="button"
             onClick={handleInjectTicket}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 transition cursor-pointer"
-            title="Enviar un ticket urgente ahora mismo a la simulación"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-indigo-600/90 hover:bg-indigo-500 text-white border border-indigo-400/30 shadow-lg shadow-indigo-600/20 transition cursor-pointer"
+            title="Forzar la llegada inmediata de un nuevo ticket al sistema"
           >
-            <PlusCircle className="w-3.5 h-3.5" />
+            <PlusCircle className="w-4 h-4" />
             + Inyectar Ticket
           </button>
 
           <button
             type="button"
-            onClick={resetSimulation}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-            title="Reiniciar simulación"
+            onClick={initializeCleanState}
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer"
+            title="Detener y reiniciar todos los contadores a cero"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Reiniciar
@@ -361,23 +396,23 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
 
           {/* Selector de velocidad */}
           <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1 text-xs">
-            <span className="px-2 text-slate-400 flex items-center gap-1">
+            <span className="px-2.5 text-slate-400 flex items-center gap-1">
               <Gauge className="w-3.5 h-3.5 text-indigo-400" />
               Velocidad:
             </span>
             {[
-              { label: 'Lenta', val: 25 },
-              { label: 'Normal', val: 60 },
-              { label: 'Rápida', val: 150 },
-              { label: 'Turbo', val: 300 },
+              { label: '1x', val: 25 },
+              { label: '2x', val: 60 },
+              { label: '5x', val: 150 },
+              { label: '10x', val: 300 },
             ].map((spd) => (
               <button
                 key={spd.val}
                 type="button"
                 onClick={() => setSimSpeed(spd.val)}
-                className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
                   simSpeed === spd.val
-                    ? 'bg-indigo-600 text-white'
+                    ? 'bg-indigo-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -388,29 +423,34 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
         </div>
       </div>
 
-      {/* Mini barra de telemetría en tiempo real */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 my-4">
-        <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
-          <div className="text-[11px] text-slate-400 flex items-center gap-1">
-            <Clock className="w-3 h-3 text-indigo-400" />
-            Tiempo Simulado
+      {/* Cinta de Telemetría en Tiempo Real */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 my-5">
+        <div className="bg-slate-950/90 border border-slate-800/90 rounded-xl px-4 py-3">
+          <div className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-indigo-400" />
+            Reloj Simulado
           </div>
-          <div className="text-sm font-mono font-bold text-white mt-0.5">
+          <div className="text-base font-mono font-bold text-white mt-1">
             {formatSimClock(simElapsedSec)}
           </div>
         </div>
 
-        <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
-          <div className="text-[11px] text-slate-400">Tickets Recibidos</div>
-          <div className="text-sm font-mono font-bold text-sky-400 mt-0.5">
-            {totalArrived} tickets
+        <div className="bg-slate-950/90 border border-slate-800/90 rounded-xl px-4 py-3">
+          <div className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
+            <Ticket className="w-3.5 h-3.5 text-sky-400" />
+            Tickets Entrantes
+          </div>
+          <div className="text-base font-mono font-bold text-sky-400 mt-1">
+            {totalArrived} recibidos
           </div>
         </div>
 
-        <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
-          <div className="text-[11px] text-slate-400">En Fila Ahora (Lq vivo)</div>
+        <div className="bg-slate-950/90 border border-slate-800/90 rounded-xl px-4 py-3">
+          <div className="text-[11px] font-medium text-slate-400">
+            En Cola Ahora (Lq vivo)
+          </div>
           <div
-            className={`text-sm font-mono font-bold mt-0.5 ${
+            className={`text-base font-mono font-bold mt-1 ${
               waitingQueue.length > 8
                 ? 'text-rose-400'
                 : waitingQueue.length > 3
@@ -418,245 +458,312 @@ export const QueueVisualizer: React.FC<QueueVisualizerProps> = ({ params }) => {
                 : 'text-emerald-400'
             }`}
           >
-            {waitingQueue.length} esperando
+            {waitingQueue.length} en fila
           </div>
         </div>
 
-        <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
-          <div className="text-[11px] text-slate-400">Técnicos Activos</div>
-          <div className="text-sm font-mono font-bold text-purple-300 mt-0.5">
+        <div className="bg-slate-950/90 border border-slate-800/90 rounded-xl px-4 py-3">
+          <div className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
+            <Cpu className="w-3.5 h-3.5 text-purple-400" />
+            Ocupación en Vivo
+          </div>
+          <div className="text-base font-mono font-bold text-purple-300 mt-1">
             {busyServersCount} / {visibleServersCount} ({instantUtilization.toFixed(0)}%)
           </div>
         </div>
 
-        <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl px-3.5 py-2.5 col-span-2 sm:col-span-1">
-          <div className="text-[11px] text-slate-400">Resueltos / Espera Media</div>
-          <div className="text-sm font-mono font-bold text-emerald-400 mt-0.5">
-            {totalResolved} ({avgObservedWaitMin.toFixed(1)}m)
+        <div className="bg-slate-950/90 border border-slate-800/90 rounded-xl px-4 py-3 col-span-2 sm:col-span-1">
+          <div className="text-[11px] font-medium text-slate-400">
+            Resueltos / Espera Media
+          </div>
+          <div className="text-base font-mono font-bold text-emerald-400 mt-1">
+            {totalResolved} ({avgObservedWaitMin.toFixed(1)} min)
           </div>
         </div>
       </div>
 
-      {/* Aviso si el sistema está matemáticamente saturado */}
+      {/* Alerta cuando ρ >= 1 */}
       {rhoTheoretical >= 1 && (
-        <div className="mb-4 px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2.5 text-xs text-rose-200">
-          <AlertOctagon className="w-4 h-4 text-rose-400 shrink-0" />
+        <div className="mb-5 px-4 py-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-3 text-xs text-rose-200">
+          <AlertOctagon className="w-5 h-5 text-rose-400 shrink-0" />
           <span>
-            <strong>Modo Saturación (ρ = {(rhoTheoretical * 100).toFixed(0)}% ≥ 100%):</strong>{' '}
-            Observa cómo llegan tickets más rápido de lo que los {num_servers} técnico(s) pueden resolverlos, haciendo que la cola crezca sin límite.
+            <strong>Alerta de Saturación Operativa (ρ = {(rhoTheoretical * 100).toFixed(1)}% ≥ 100%):</strong>{' '}
+            La tasa de llegada supera la capacidad máxima de los {num_servers} técnico(s). Al iniciar la simulación verás cómo la fila crece indefinidamente.
           </span>
         </div>
       )}
 
-      {/* Escenario Gráfico de 3 Etapas: Entrada -> Cola FIFO -> Técnicos Paralelos -> Salida */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch bg-slate-950/70 border border-slate-800/90 rounded-2xl p-4">
-        {/* ETAPA 1: Entrada & Cola de Espera (FIFO) */}
-        <div className="lg:col-span-5 flex flex-col justify-between bg-slate-900/80 border border-slate-800 rounded-xl p-4">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition ${
-                    recentArrivalFlash
-                      ? 'bg-sky-400 text-slate-950 scale-105'
-                      : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                  }`}
-                >
-                  1. Llegadas (λ = {lambda_rate}/h)
-                </span>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-xs font-semibold text-white">
-                  Cola de Espera (FIFO)
-                </span>
-              </div>
-              <span className="text-xs font-mono text-slate-400">
-                {waitingQueue.length} en fila
-              </span>
+      {/* Banner de Bienvenida si el usuario aún no ha iniciado la simulación */}
+      {!hasStarted && (
+        <div className="mb-5 bg-indigo-950/30 border border-indigo-500/30 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">
+              <Radio className="w-6 h-6 animate-pulse" />
             </div>
+            <div>
+              <h4 className="text-sm font-bold text-white">
+                La simulación interactiva está lista para comenzar
+              </h4>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Presiona el botón verde <strong>"Iniciar Simulación"</strong> para ver cómo ingresan los tickets en tiempo real, o usa <strong>"+ Inyectar Ticket"</strong> para enviarlos manualmente uno por uno.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleStartSimulation}
+            className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition cursor-pointer"
+          >
+            <Play className="w-4 h-4 fill-current" />
+            Iniciar Simulación Ahora
+          </button>
+        </div>
+      )}
 
-            {/* Carril visual de la cola */}
-            <div className="min-h-[140px] bg-slate-950 border border-dashed border-slate-800 rounded-xl p-3 flex flex-wrap content-start gap-2 relative">
-              {waitingQueue.length === 0 ? (
-                <div className="w-full h-[116px] flex flex-col items-center justify-center text-center text-slate-500 text-xs">
-                  <Sparkles className="w-5 h-5 text-emerald-400/70 mb-1" />
-                  <span>Cola vacía (Lq = 0)</span>
-                  <span className="text-[11px] text-slate-600">
-                    Todo ticket entrante pasa directo a un técnico libre
+      {/* Lienzo Amplio de las 3 Etapas del Sistema de Colas */}
+      <div className="space-y-5">
+        {/* FILA SUPERIOR: Etapa 1 (Cola de Espera FIFO) + Etapa 3 (Historial de Salida) */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+          {/* ETAPA 1: Llegadas y Cola de Espera */}
+          <div className="xl:col-span-8 bg-slate-950/90 border border-slate-800/90 rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wider transition ${
+                      recentArrivalFlash
+                        ? 'bg-sky-400 text-slate-950 scale-105'
+                        : 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
+                    }`}
+                  >
+                    1. Llegadas (λ = {lambda_rate}/h)
+                  </span>
+                  <ArrowRight className="w-4 h-4 text-slate-500" />
+                  <span className="text-sm font-semibold text-white">
+                    Cola de Espera en Vivo (FIFO)
                   </span>
                 </div>
-              ) : (
-                waitingQueue.map((ticket, index) => {
-                  const waitSec = Math.max(0, simElapsedSec - ticket.createdAtSimSec);
-                  const waitMin = (waitSec / 60).toFixed(1);
-                  return (
-                    <div
-                      key={ticket.id}
-                      className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono shadow-md flex items-center gap-1.5 transition-all duration-300 ${
-                        ticket.color
-                      } ${index === 0 ? 'ring-2 ring-white scale-105' : 'opacity-90'}`}
-                      title={`Esperando hace ${waitMin} min simulados`}
-                    >
-                      <span className="font-bold">{ticket.label}</span>
-                      <span className="text-[10px] opacity-80 bg-black/25 px-1 rounded">
-                        {waitMin}m
-                      </span>
-                    </div>
-                  );
-                })
-              )}
+                <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
+                  {waitingQueue.length} ticket(s) esperando
+                </span>
+              </div>
+
+              {/* Carril de Tickets en Cola */}
+              <div className="min-h-[120px] max-h-[190px] overflow-y-auto bg-slate-900/70 border border-dashed border-slate-800 rounded-xl p-3.5 flex flex-wrap content-start gap-2.5">
+                {waitingQueue.length === 0 ? (
+                  <div className="w-full h-[92px] flex flex-col items-center justify-center text-center text-slate-500 text-xs">
+                    <Sparkles className="w-5 h-5 text-emerald-400/70 mb-1.5" />
+                    <span className="font-medium text-slate-300">
+                      Sin tickets acumulados en la fila (Lq = 0)
+                    </span>
+                    <span className="text-[11px] text-slate-500 mt-0.5">
+                      Cualquier ticket que ingrese será asignado de inmediato a un técnico libre
+                    </span>
+                  </div>
+                ) : (
+                  waitingQueue.map((ticket, index) => {
+                    const waitSec = Math.max(0, simElapsedSec - ticket.createdAtSimSec);
+                    const waitMin = (waitSec / 60).toFixed(1);
+                    return (
+                      <div
+                        key={ticket.id}
+                        className={`px-3 py-1.5 rounded-xl border text-xs font-mono shadow-sm flex items-center gap-2 transition-all duration-200 ${
+                          ticket.color
+                        } ${
+                          index === 0
+                            ? 'ring-2 ring-sky-400/80 bg-sky-500/30 font-bold'
+                            : ''
+                        }`}
+                      >
+                        <span className="font-bold">{ticket.label}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-950/60 text-slate-200">
+                          {waitMin}m
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+              <span>
+                {waitingQueue.length > 0 ? (
+                  <>
+                    Próximo en ser atendido:{' '}
+                    <strong className="text-sky-300 font-mono">
+                      {waitingQueue[0].label}
+                    </strong>
+                  </>
+                ) : (
+                  'Flujo despejado: atención inmediata disponible'
+                )}
+              </span>
+              <span className="text-[11px] text-slate-500">
+                Disciplina FIFO (Primero en Entrar, Primero en Salir)
+              </span>
             </div>
           </div>
 
-          <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-            <span>
-              {waitingQueue.length > 0
-                ? `Siguiente en pasar: ${waitingQueue[0].label}`
-                : 'Sin demora en fila'}
-            </span>
-            <span>Disciplina: Primero en Entrar, Primero en Salir</span>
+          {/* ETAPA 3: Salida de Tickets Resueltos */}
+          <div className="xl:col-span-4 bg-slate-950/90 border border-slate-800/90 rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  3. Tickets Resueltos (Salida)
+                </span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              </div>
+
+              <div className="space-y-2 min-h-[120px] max-h-[190px] overflow-y-auto pr-1">
+                {completedLogs.length === 0 ? (
+                  <div className="h-[92px] flex items-center justify-center text-center text-xs text-slate-500 px-3">
+                    A medida que los técnicos finalicen los tickets, verás aquí su registro y cuánto esperaron en cola.
+                  </div>
+                ) : (
+                  completedLogs.map((log) => (
+                    <div
+                      key={log.id}
+                      className="px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-emerald-400">
+                          {log.label}
+                        </span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                          Técnico #{log.serverId}
+                        </span>
+                      </div>
+                      <div className="text-right font-mono text-[11px]">
+                        <span className="text-slate-400">Espera: </span>
+                        <span className="text-white font-semibold">
+                          {(log.waitSimSec / 60).toFixed(1)} min
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-800/80 text-xs text-slate-400 flex justify-between">
+              <span>Últimas salidas del sistema</span>
+              <span className="text-emerald-400 font-semibold font-mono">
+                Total cerrados: {totalResolved}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* ETAPA 2: Estaciones de Soporte (Técnicos en Paralelo s) */}
-        <div className="lg:col-span-4 flex flex-col justify-between bg-slate-900/80 border border-slate-800 rounded-xl p-4">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                2. Técnicos (s = {num_servers}, μ = {mu_rate}/h)
-              </span>
-              <span className="text-xs text-slate-400">
-                {busyServersCount}/{visibleServersCount} ocupados
+        {/* FILA INFERIOR COMPLETA: Etapa 2 — Estaciones de Técnicos en Paralelo (Amplia y sin cortes) */}
+        <div className="bg-slate-950/90 border border-slate-800/90 rounded-2xl p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div className="flex items-center gap-2.5">
+              <span className="px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wider bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                2. Estaciones de Soporte en Paralelo (s = {num_servers} técnicos · μ = {mu_rate} tickets/h c/u)
               </span>
             </div>
+            <div className="text-xs font-mono px-3 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
+              Activos: <strong className="text-indigo-300">{busyServersCount}</strong> de{' '}
+              <strong>{visibleServersCount}</strong> ({instantUtilization.toFixed(0)}% ocupación)
+            </div>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[220px] overflow-y-auto pr-1">
-              {servers.map((srv) => {
-                const tk = srv.currentTicket;
-                const progressPct = tk
-                  ? Math.min(
-                      100,
-                      Math.max(
-                        5,
-                        ((tk.totalServiceDurationSimSec - tk.remainingServiceSimSec) /
-                          tk.totalServiceDurationSimSec) *
-                          100
-                      )
+          {/* Grid espacioso para las tarjetas de cada técnico */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3.5">
+            {servers.map((srv) => {
+              const tk = srv.currentTicket;
+              const progressPct = tk
+                ? Math.min(
+                    100,
+                    Math.max(
+                      6,
+                      ((tk.totalServiceDurationSimSec - tk.remainingServiceSimSec) /
+                        tk.totalServiceDurationSimSec) *
+                        100
                     )
-                  : 0;
+                  )
+                : 0;
 
-                return (
-                  <div
-                    key={srv.serverId}
-                    className={`p-3 rounded-xl border transition-all ${
-                      tk
-                        ? 'bg-indigo-950/40 border-indigo-500/40 shadow-md'
-                        : 'bg-slate-950/60 border-slate-800/80'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-xs mb-1.5">
-                      <span className="font-semibold text-slate-200 flex items-center gap-1.5">
-                        <UserCheck
-                          className={`w-3.5 h-3.5 ${
-                            tk ? 'text-indigo-400' : 'text-emerald-400'
+              return (
+                <div
+                  key={srv.serverId}
+                  className={`p-4 rounded-xl border transition-all flex flex-col justify-between ${
+                    tk
+                      ? 'bg-indigo-950/30 border-indigo-500/40 shadow-lg shadow-indigo-950/30'
+                      : 'bg-slate-900/60 border-slate-800/90'
+                  }`}
+                >
+                  <div>
+                    {/* Cabecera limpia de la tarjeta del técnico sin superposiciones */}
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className={`p-1.5 rounded-lg shrink-0 ${
+                            tk
+                              ? 'bg-indigo-500/20 text-indigo-300'
+                              : 'bg-emerald-500/15 text-emerald-400'
                           }`}
-                        />
-                        Técnico #{srv.serverId}
-                      </span>
+                        >
+                          <UserCheck className="w-4 h-4" />
+                        </div>
+                        <span className="font-bold text-sm text-white truncate">
+                          Técnico #{srv.serverId}
+                        </span>
+                      </div>
+
                       <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                        className={`shrink-0 text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${
                           tk
-                            ? 'bg-amber-500/20 text-amber-300'
-                            : 'bg-emerald-500/15 text-emerald-300'
+                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                            : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                         }`}
                       >
-                        {tk ? 'Atendiendo' : 'Libre'}
+                        {tk ? 'Atendiendo' : 'Disponible'}
                       </span>
                     </div>
 
+                    {/* Cuerpo de progreso del ticket */}
                     {tk ? (
-                      <div>
-                        <div className="flex items-center justify-between text-xs font-mono mb-1">
-                          <span className="font-bold text-white">{tk.label}</span>
-                          <span className="text-[11px] text-indigo-300">
+                      <div className="bg-slate-950/80 border border-slate-800/90 rounded-lg p-2.5">
+                        <div className="flex items-center justify-between text-xs font-mono mb-1.5">
+                          <span className="font-bold text-indigo-300">
+                            Ticket: {tk.label}
+                          </span>
+                          <span className="text-white font-semibold">
                             {progressPct.toFixed(0)}%
                           </span>
                         </div>
                         <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-indigo-500 transition-all duration-150"
+                            className="h-full bg-gradient-to-r from-indigo-500 to-sky-400 transition-all duration-150"
                             style={{ width: `${progressPct}%` }}
                           />
                         </div>
                       </div>
                     ) : (
-                      <div className="text-[11px] text-slate-500 py-1.5">
-                        Esperando asignación...
+                      <div className="bg-slate-950/40 border border-dashed border-slate-800/80 rounded-lg p-2.5 text-center text-xs text-slate-500">
+                        Esperando asignación de ticket...
                       </div>
                     )}
-
-                    <div className="mt-2 text-[10px] text-slate-500 text-right">
-                      Atendidos: {srv.ticketsResolved}
-                    </div>
                   </div>
-                );
-              })}
-            </div>
+
+                  <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-400">
+                    <span>Capacidad: {mu_rate} tk/h</span>
+                    <span className="font-mono text-slate-300">
+                      Resueltos: <strong>{srv.ticketsResolved}</strong>
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          {num_servers > 12 && (
-            <div className="mt-2 text-[11px] text-amber-300">
-              Mostrando 12 de {num_servers} técnicos en paralelo.
+          {num_servers > 16 && (
+            <div className="mt-3 text-xs text-amber-300">
+              Mostrando las primeras 16 estaciones de {num_servers} técnicos configurados.
             </div>
           )}
-        </div>
-
-        {/* ETAPA 3: Salida de Tickets Resueltos */}
-        <div className="lg:col-span-3 flex flex-col justify-between bg-slate-900/80 border border-slate-800 rounded-xl p-4">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                3. Resueltos (Salida)
-              </span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            </div>
-
-            <div className="space-y-2 min-h-[140px]">
-              {completedLogs.length === 0 ? (
-                <div className="h-[116px] flex items-center justify-center text-center text-xs text-slate-500">
-                  Los tickets finalizados aparecerán aquí con su tiempo real de espera...
-                </div>
-              ) : (
-                completedLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800/90 flex items-center justify-between text-xs"
-                  >
-                    <div>
-                      <span className="font-mono font-bold text-emerald-400">
-                        {log.label}
-                      </span>
-                      <span className="text-[11px] text-slate-500 ml-1.5">
-                        (Téc. #{log.serverId})
-                      </span>
-                    </div>
-                    <div className="text-right font-mono text-[11px]">
-                      <span className="text-slate-400">Cola: </span>
-                      <span className="text-slate-200 font-semibold">
-                        {(log.waitSimSec / 60).toFixed(1)}m
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="mt-3 pt-2.5 border-t border-slate-800/80 text-[11px] text-slate-400 flex justify-between">
-            <span>Últimos tickets cerrados</span>
-            <span className="text-emerald-400 font-semibold">
-              Total: {totalResolved}
-            </span>
-          </div>
         </div>
       </div>
     </div>
